@@ -99,25 +99,16 @@ BEGIN
             IF SQLERRM = 'Invalid order status transition was accepted' THEN
                 RAISE;
             END IF;
-    END;
 
-    BEGIN
-        UPDATE inventory_movements
-        SET note = 'illegal mutation'
-        WHERE product_id = v_product_id
-        LIMIT 1;
-
-        RAISE EXCEPTION 'Inventory ledger mutation was accepted';
-    EXCEPTION
-        WHEN syntax_error THEN
-            NULL;
+            IF SQLERRM NOT LIKE 'Invalid order status transition:%' THEN
+                RAISE;
+            END IF;
     END;
 END;
 $$;
 
 ROLLBACK;
 
--- PostgreSQL UPDATE has no LIMIT. Test immutability with a separate transaction block.
 BEGIN;
 
 DO $$
@@ -139,6 +130,10 @@ BEGIN
     EXCEPTION
         WHEN OTHERS THEN
             IF SQLERRM = 'Inventory ledger mutation was accepted' THEN
+                RAISE;
+            END IF;
+
+            IF SQLERRM NOT LIKE 'Inventory movements are immutable%' THEN
                 RAISE;
             END IF;
     END;
