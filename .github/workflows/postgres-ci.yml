@@ -1,0 +1,67 @@
+name: PostgreSQL CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-database:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: commerceledger
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d commerceledger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: commerceledger
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Initialize database
+        run: |
+          for file in db/init/*.sql; do
+            echo "Applying $file"
+            psql -v ON_ERROR_STOP=1 -f "$file"
+          done
+
+      - name: Run schema tests
+        run: psql -f tests/001_schema_tests.sql
+
+      - name: Run business rule tests
+        run: psql -f tests/002_business_rules_tests.sql
+
+      - name: Validate analytics queries
+        run: psql -v ON_ERROR_STOP=1 -f queries/analytics.sql
+
+      - name: Show database objects
+        run: |
+          psql -c "\dt"
+          psql -c "\dv"
+          psql -c "\dm"
